@@ -1,0 +1,50 @@
+name: Feature Branch Workflow
+
+on:
+  push:
+    branches-ignore:
+      - develop
+      - master
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [12.x]
+
+    # Check out the last 2 commits with fetch-depth: 2
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
+      - name: Fetch origin
+        run: git fetch origin
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests & build
+        shell: bash
+        run: |
+          if [[ $GITHUB_BASE_REF ]]
+          then
+            echo "Pull Request Event - GitHub.BaseRef: $GITHUB_BASE_REF"
+            export NX_BASE_TEMP=$(git log --format=%H -n 1 origin/${{ github.base_ref }})
+            export NX_BASE=$(sed -e 's/^“//' -e 's/”$//' <<<"$NX_BASE_TEMP")
+            echo "Pull Request Event - since GitHub.BaseRef was found - using commit id of target branch: $NX_BASE"
+          else
+            echo "Push Event"
+            export NX_BASE=$(git rev-parse HEAD~1)
+            echo "Push Event - since GitHub.BaseRef not found - using last commit id: $NX_BASE"
+          fi
+          npm run nx affected:test -- --base=$NX_BASE
+          npm run nx affected:build -- --base=$NX_BASE
